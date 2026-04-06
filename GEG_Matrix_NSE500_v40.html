@@ -3934,5 +3934,250 @@ console.log('[v39] ready \u2014 PFD:',Object.keys(PFD).length,'symbols');
     }
 })();
 </script>
+<!-- ============================================================
+     PASTE THIS BLOCK JUST BEFORE </body> IN THE HTML FILE
+     No other changes needed.
+     ============================================================ -->
+<script>
+(function(){
+  // Wait for the page to be ready
+  var ready = function(fn){ document.readyState==='loading' ? document.addEventListener('DOMContentLoaded',fn) : fn(); };
+  ready(function(){
+    var panel = document.getElementById('peContextPanel');
+    if(!panel) return;
+
+    // Watch for when peContextPanel becomes visible
+    new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        if(m.attributeName==='style' && panel.style.display!=='none'){
+          requestAnimationFrame(function(){
+            var c = document.getElementById('holdingsChart');
+            if(!c) return;
+            var w = c.parentElement ? c.parentElement.clientWidth : 0;
+            if(w < 10) w = 600;
+            // Only reset if size changed (avoids flicker on re-open)
+            if(c.width !== w){ c.width = w; c.height = 180; }
+            // Re-call draw with the stored symbol
+            var sym = window.__holdSym;
+            if(!sym) return;
+            var pfd = (typeof PFD!=='undefined') ? PFD[sym] : null;
+            if(!pfd || !pfd.pro) return;
+            drawHoldings(c, pfd, sym);
+          });
+        }
+      });
+    }).observe(panel, {attributes:true});
+
+    // Intercept the existing draw to capture the symbol
+    var _orig = window.drawHoldingsChart || window.renderHoldings || window.plotHoldings;
+    // We define a universal draw fallback in case the original uses Canvas API
+    window.drawHoldings = function(canvas, pfd, sym){
+      var ctx = canvas.getContext('2d');
+      if(!ctx) return;
+      var W = canvas.width, H = canvas.height;
+      ctx.clearRect(0,0,W,H);
+      var n = (pfd.pro||[]).length;
+      if(!n) return;
+      var barW = Math.floor((W - 60) / n) - 4;
+      var colors = { pro:'#f0c040', fii:'#4a9eff', dii:'#6dcc45', ret:'#f06060' };
+      var keys   = ['pro','fii','dii','ret'];
+      var labels = ['Promoter','FII','DII','Retail'];
+      // Draw stacked bars
+      for(var i=0;i<n;i++){
+        var x = 50 + i*(barW+4);
+        var yOff = H - 20;
+        keys.forEach(function(k,ki){
+          var val = (pfd[k]||[])[i]||0;
+          var bh  = Math.round((val/100)*(H-30));
+          ctx.fillStyle = colors[k];
+          ctx.fillRect(x, yOff - bh, barW, bh);
+          yOff -= bh;
+        });
+        // Quarter label (Q1..Q8)
+        ctx.fillStyle = '#7a7060';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Q'+(i+1), x+barW/2, H-4);
+      }
+      // Y-axis label
+      ctx.fillStyle = '#7a7060';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'right';
+      [0,25,50,75,100].forEach(function(v){
+        var y = H - 20 - Math.round((v/100)*(H-30));
+        ctx.fillText(v+'%', 44, y+3);
+        ctx.strokeStyle='rgba(255,255,255,0.04)';
+        ctx.beginPath(); ctx.moveTo(48,y); ctx.lineTo(W,y); ctx.stroke();
+      });
+    };
+
+    // Hook: capture sym whenever peContextPanel is shown
+    // We intercept the style setter on peContextPanel
+    var _styleDesc = Object.getOwnPropertyDescriptor(HTMLElement.prototype,'style');
+    // Simpler approach: patch via a global variable set by showDetail / plotFromEntry
+    // Find where sym is set: just before peContextPanel becomes visible
+    // Inject a global setter trap
+    var _showDetail = window.showDetail;
+    if(typeof _showDetail === 'function'){
+      window.showDetail = function(sym){
+        window.__holdSym = sym;
+        return _showDetail.apply(this, arguments);
+      };
+    }
+    // Also trap plotFromEntry
+    var _plotFromEntry = window.plotFromEntry;
+    if(typeof _plotFromEntry === 'function'){
+      window.plotFromEntry = function(){
+        // sym will be captured when panel shows
+        var r = _plotFromEntry.apply(this, arguments);
+        // Grab sym from detailTitle text as fallback
+        var t = document.getElementById('detailTitle');
+        if(t) window.__holdSym = t.textContent.split(' ')[0];
+        return r;
+      };
+    }
+  });
+})();
+</script>
+<!-- ============================================================
+     PASTE THIS BLOCK JUST BEFORE </body>
+     Fixes: Shareholding chart blank because canvas has 0px width
+     when peContextPanel is hidden (display:none at draw time).
+     ============================================================ -->
+<script>
+(function(){
+  // Find the function that shows peContextPanel and hook into it.
+  // In v40 the panel is shown inside plotFromEntry() / chip click handlers
+  // by setting peContextPanel.style.display = 'block'.
+  // We intercept that via a MutationObserver and re-draw the canvas
+  // after the panel becomes visible (so clientWidth is non-zero).
+
+  function drawHoldingsChart(sym) {
+    var canvas = document.getElementById('holdingsChart');
+    if (!canvas) return;
+
+    var pfd = (typeof PFD !== 'undefined') ? PFD[sym] : null;
+    if (!pfd || !pfd.pro || !pfd.pro.length) {
+      // No PFD data — show a "no data" message instead of blank
+      var ctx = canvas.getContext('2d');
+      var W = canvas.offsetWidth || 600;
+      canvas.width  = W;
+      canvas.height = 60;
+      ctx.clearRect(0, 0, W, 60);
+      ctx.fillStyle = '#7a7060';
+      ctx.font = '13px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('No shareholding data available for ' + sym, W / 2, 32);
+      return;
+    }
+
+    // Size the canvas to its actual rendered width
+    var W = canvas.offsetWidth;
+    if (!W || W < 10) W = 600;
+    var H = 200;
+    canvas.width  = W;
+    canvas.height = H;
+
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    var n       = pfd.pro.length;           // number of quarters (up to 8)
+    var PAD_L   = 46, PAD_B = 22, PAD_T = 10, PAD_R = 8;
+    var chartW  = W - PAD_L - PAD_R;
+    var chartH  = H - PAD_T - PAD_B;
+    var barW    = Math.max(8, Math.floor(chartW / n) - 6);
+    var gap     = Math.floor((chartW - barW * n) / (n + 1));
+
+    var COLORS = {
+      pro: '#f0c040',   // Promoter — gold
+      fii: '#4a9eff',   // FII      — blue
+      dii: '#6dcc45',   // DII      — green
+      ret: '#f06060'    // Retail   — red
+    };
+    var KEYS   = ['pro', 'fii', 'dii', 'ret'];
+
+    // Y-axis gridlines + labels
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillStyle   = '#7a7060';
+    ctx.font        = '10px monospace';
+    ctx.textAlign   = 'right';
+    ctx.lineWidth   = 1;
+    [0, 25, 50, 75, 100].forEach(function(v) {
+      var y = PAD_T + chartH - Math.round((v / 100) * chartH);
+      ctx.fillText(v + '%', PAD_L - 4, y + 3);
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, y);
+      ctx.lineTo(W - PAD_R, y);
+      ctx.stroke();
+    });
+
+    // Stacked bars — bottom to top: ret, dii, fii, pro
+    var DRAW_KEYS = ['ret', 'dii', 'fii', 'pro'];   // draw order (bottom first)
+    for (var i = 0; i < n; i++) {
+      var x    = PAD_L + gap + i * (barW + gap);
+      var yOff = PAD_T + chartH;   // current bottom of stack
+
+      DRAW_KEYS.forEach(function(k) {
+        var val = (pfd[k] && pfd[k][i] != null) ? pfd[k][i] : 0;
+        var bh  = Math.round((val / 100) * chartH);
+        if (bh < 1) return;
+        ctx.fillStyle = COLORS[k];
+        ctx.fillRect(x, yOff - bh, barW, bh);
+        yOff -= bh;
+      });
+
+      // Quarter label
+      ctx.fillStyle   = '#7a7060';
+      ctx.font        = '9px monospace';
+      ctx.textAlign   = 'center';
+      ctx.fillText('Q' + (i + 1), x + barW / 2, H - 6);
+    }
+  }
+
+  // Watch peContextPanel for visibility changes
+  document.addEventListener('DOMContentLoaded', function() {
+    var panel = document.getElementById('peContextPanel');
+    if (!panel) return;
+
+    var lastSym = null;
+
+    // Grab symbol from detailTitle whenever panel opens
+    new MutationObserver(function(muts) {
+      muts.forEach(function(m) {
+        if (m.attributeName !== 'style') return;
+        var visible = panel.style.display !== 'none' && panel.style.display !== '';
+        if (!visible) return;
+
+        // Use requestAnimationFrame to ensure layout is complete
+        // so offsetWidth is non-zero
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            var titleEl = document.getElementById('detailTitle');
+            var sym = titleEl ? titleEl.textContent.trim().split(/\s+/)[0] : null;
+            if (!sym) sym = lastSym;
+            if (sym) { lastSym = sym; drawHoldingsChart(sym); }
+          });
+        });
+      });
+    }).observe(panel, { attributes: true, attributeFilter: ['style'] });
+
+    // Also hook the detailPanel itself — in case peContextPanel is already
+    // visible when detailPanel opens (e.g. switching symbols)
+    var detailPanel = document.getElementById('detailPanel');
+    if (detailPanel) {
+      new MutationObserver(function() {
+        // Short delay so inner state settles
+        setTimeout(function() {
+          var p = document.getElementById('peContextPanel');
+          if (!p || p.style.display === 'none') return;
+          var titleEl = document.getElementById('detailTitle');
+          var sym = titleEl ? titleEl.textContent.trim().split(/\s+/)[0] : null;
+          if (sym) { lastSym = sym; drawHoldingsChart(sym); }
+        }, 80);
+      }).observe(detailPanel, { attributes: true, attributeFilter: ['style', 'class'] });
+    }
+  });
+})();
+</script>
 </body>
 </html>
