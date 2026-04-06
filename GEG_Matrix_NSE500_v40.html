@@ -1910,7 +1910,8 @@ function renderGEGGrid(quarters, currentMarketPrice) {
     <span style="color:#888">Actual price range: ₹${Math.round(diagMin).toLocaleString('en-IN')} → ₹${Math.round(diagMax).toLocaleString('en-IN')}</span>`;
   grid.appendChild(bar);
 
-  // ── VALUATION VERDICT ─────────────────────────────────────────────
+
+// ── VALUATION VERDICT ─────────────────────────────────────────────
   const latestQ      = quarters[quarters.length - 1];
   const latestTTM    = ttm[ttm.length - 1];
   const verdictEl    = document.getElementById('valuationVerdict');
@@ -1926,6 +1927,28 @@ function renderGEGGrid(quarters, currentMarketPrice) {
   const derivedPrice = medianPE > 0 && latestTTM > 0 ? Math.round(medianPE * latestTTM) : null;
   const latestPE   = quarters[quarters.length-1].p;
   const stockMoS   = medianPE > 0 ? ((medianPE - latestPE) / medianPE) * 100 : 0;
+
+  // ── 3-YR & 5-YR MEDIAN PE COMPUTATION ────────────────────────────
+  // quarters are assumed ordered oldest→newest; each quarter has a .p (PE) field
+  const validPEQuarters = quarters.filter(q => q.p > 0);
+  const totalQ = validPEQuarters.length;
+
+  function medianOfArray(arr) {
+    if (!arr.length) return null;
+    const sorted = [...arr].sort((a,b)=>a-b);
+    const mid = Math.floor(sorted.length/2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
+  }
+
+  // 3 years = last 12 quarters, 5 years = last 20 quarters
+  const pe3YrArr  = validPEQuarters.slice(-12).map(q=>q.p);
+  const pe5YrArr  = validPEQuarters.slice(-20).map(q=>q.p);
+  const median3YrPE = medianOfArray(pe3YrArr);
+  const median5YrPE = medianOfArray(pe5YrArr);
+
+  // Derived values at current TTM EPS
+  const val3Yr = (median3YrPE && latestTTM > 0) ? Math.round(median3YrPE * latestTTM) : null;
+  const val5Yr = (median5YrPE && latestTTM > 0) ? Math.round(median5YrPE * latestTTM) : null;
 
   if (verdictEl && derivedPrice !== null) {
     verdictEl.style.display = 'block';
@@ -1964,6 +1987,7 @@ function renderGEGGrid(quarters, currentMarketPrice) {
           </div>
           <div style="width:100%;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);display:flex;gap:20px;flex-wrap:wrap;align-items:center">
             <div style="display:flex;flex-wrap:wrap;gap:12px;width:100%;align-items:stretch">
+
               <!-- Box 1: All-Time High PE -->
               <div style="background:rgba(240,80,80,0.08);border:1px solid rgba(240,80,80,0.3);border-radius:8px;padding:10px 14px;flex:1;min-width:130px;text-align:center;display:flex;flex-direction:column;justify-content:center">
                 <div style="font-size:11px;color:#aaa;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">All-Time High PE</div>
@@ -1971,6 +1995,7 @@ function renderGEGGrid(quarters, currentMarketPrice) {
                 <div style="font-size:16px;color:#f06060;margin-top:4px;font-weight:700">${s.pe10YrHigh && latestTTM > 0 ? "Value ₹"+Math.round(s.pe10YrHigh * latestTTM).toLocaleString('en-IN') : "—"}</div>
                 <div style="font-size:13px;color:#888;margin-top:3px;font-weight:600">TTM EPS ₹${latestTTM.toFixed(1)}</div>
               </div>
+
               <!-- Box 2: All-Time Low PE -->
               <div style="background:rgba(109,204,69,0.08);border:1px solid rgba(109,204,69,0.3);border-radius:8px;padding:10px 14px;flex:1;min-width:130px;text-align:center;display:flex;flex-direction:column;justify-content:center">
                 <div style="font-size:11px;color:#aaa;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">All-Time Low PE</div>
@@ -1978,6 +2003,23 @@ function renderGEGGrid(quarters, currentMarketPrice) {
                 <div style="font-size:16px;color:#6dcc45;margin-top:4px;font-weight:700">${s.pe10YrLow && latestTTM > 0 ? "Value ₹"+Math.round(s.pe10YrLow * latestTTM).toLocaleString('en-IN') : "—"}</div>
                 <div style="font-size:13px;color:#888;margin-top:3px;font-weight:600">TTM EPS ₹${latestTTM.toFixed(1)}</div>
               </div>
+
+              <!-- Box 2B: 3-Yr Median PE (NEW) -->
+              <div style="background:rgba(160,100,240,0.08);border:1px solid rgba(160,100,240,0.35);border-radius:8px;padding:10px 14px;flex:1;min-width:130px;text-align:center;display:flex;flex-direction:column;justify-content:center">
+                <div style="font-size:11px;color:#aaa;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">3-Yr Median PE</div>
+                <div style="font-size:22px;font-weight:700;color:#b06ef0;font-family:'Cinzel',serif">${median3YrPE ? median3YrPE.toFixed(1)+"x" : "—"}</div>
+                <div style="font-size:16px;color:#b06ef0;margin-top:4px;font-weight:700">${val3Yr ? "Value ₹"+val3Yr.toLocaleString('en-IN') : "—"}</div>
+                <div style="font-size:13px;color:#888;margin-top:3px;font-weight:600">TTM EPS ₹${latestTTM.toFixed(1)}</div>
+              </div>
+
+              <!-- Box 2C: 5-Yr Median PE (NEW) -->
+              <div style="background:rgba(64,180,220,0.08);border:1px solid rgba(64,180,220,0.35);border-radius:8px;padding:10px 14px;flex:1;min-width:130px;text-align:center;display:flex;flex-direction:column;justify-content:center">
+                <div style="font-size:11px;color:#aaa;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">5-Yr Median PE</div>
+                <div style="font-size:22px;font-weight:700;color:#40b4dc;font-family:'Cinzel',serif">${median5YrPE ? median5YrPE.toFixed(1)+"x" : "—"}</div>
+                <div style="font-size:16px;color:#40b4dc;margin-top:4px;font-weight:700">${val5Yr ? "Value ₹"+val5Yr.toLocaleString('en-IN') : "—"}</div>
+                <div style="font-size:13px;color:#888;margin-top:3px;font-weight:600">TTM EPS ₹${latestTTM.toFixed(1)}</div>
+              </div>
+
               <!-- Box 3: 10-Yr Median PE -->
               <div style="background:rgba(240,192,64,0.10);border:1px solid rgba(240,192,64,0.35);border-radius:8px;padding:10px 14px;flex:1;min-width:130px;text-align:center;display:flex;flex-direction:column;justify-content:center">
                 <div style="font-size:11px;color:#aaa;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">10-Yr Median PE</div>
@@ -1985,6 +2027,7 @@ function renderGEGGrid(quarters, currentMarketPrice) {
                 <div style="font-size:16px;color:#f0c040;margin-top:4px;font-weight:700">${latestTTM > 0 ? "Value ₹"+Math.round(medianPE * latestTTM).toLocaleString('en-IN') : "—"}</div>
                 <div style="font-size:13px;color:#888;margin-top:3px;font-weight:600">TTM EPS ₹${latestTTM.toFixed(1)}</div>
               </div>
+
               <!-- Box 4: Current TTM PE = CMP ÷ TTM EPS, vs Median PE verdict -->
               ${(()=>{ const livePE = latestTTM > 0 ? currentMarketPrice / latestTTM : null;
                 const peBelow = livePE !== null && livePE < medianPE;
@@ -2000,6 +2043,7 @@ function renderGEGGrid(quarters, currentMarketPrice) {
                   <div style="font-size:16px;color:${peColor};margin-top:4px;font-weight:700">${liveVal}</div>
                   <div style="font-size:13px;color:${peColor};margin-top:3px;font-weight:600">${peVerdict}</div>
                 </div>`; })()}
+
             </div>
             <div id="fyLowsInVerdict" style="width:100%"></div>
             <div id="fyHighsInVerdict" style="width:100%"></div>
@@ -2007,9 +2051,6 @@ function renderGEGGrid(quarters, currentMarketPrice) {
               <span style="font-size:11px;color:#666;margin-left:4px">${stockMoS>20?'High MoS — strong buy zone':stockMoS>0?'Positive MoS':stockMoS>-20?'Slight premium':'Trading above history'}</span>
             </div>
             ${(()=>{
-              // BUY ZONE  = All-time Low PE × TTM × 0.80  (20% margin of safety on cheapest historical valuation)
-              // FAIR VALUE = Low PE × TTM  →  High PE × TTM
-              // EXPENSIVE  = All-time High PE × TTM × 1.20
               const peLowV  = s.pe10YrLow  > 0 ? s.pe10YrLow  : null;
               const peHighV = s.pe10YrHigh > 0 ? s.pe10YrHigh : null;
               const ttmV    = latestTTM    > 0 ? latestTTM    : null;
@@ -2041,7 +2082,6 @@ function renderGEGGrid(quarters, currentMarketPrice) {
             })()}
           </div>
         </div>`;
-      // Inject FY yearly lows into the placeholder rendered above
       var fySlot = document.getElementById('fyLowsInVerdict');
       if (fySlot) renderFYLowsSection(currentSym, fySlot);
       var fyHighSlot = document.getElementById('fyHighsInVerdict');
@@ -2058,7 +2098,7 @@ function renderGEGGrid(quarters, currentMarketPrice) {
             Enter the current CMP in the field above and click <b style="color:#f0c040">▶ Plot</b> to see Over/Undervaluation verdict
           </div>
           <div id="fyLowsInVerdict" style="width:100%"></div>
-            <div id="fyHighsInVerdict" style="width:100%"></div>
+          <div id="fyHighsInVerdict" style="width:100%"></div>
         </div>`;
       var fySlot2 = document.getElementById('fyLowsInVerdict');
       if (fySlot2) renderFYLowsSection(currentSym, fySlot2);
@@ -3574,98 +3614,6 @@ function _pv(pe,eps){return(pe>0&&pe<999&&eps>0)?'\u20B9'+Math.round(pe*eps).toS
 
 /* 10yr Median PE now comes directly from PFD.pe10yr (from 10_year_PE file) */
 
-/* ═══ A. PE MATRIX ═══════════════════════════════════════════════ */
-function _renderPE(d,ttm,cmp){
-  /* 10yr Median PE from uploaded file, Current TTM PE = CMP / TTM EPS */
-  const med10=d.pe10yr||d.pe5yrMed||0;
-  const currPE=cmp>0&&ttm>0?(cmp/ttm):0;
-
-  /* Fair Value = 10yr Median PE × TTM EPS (primary), fall back to 5yr median */
-  const fp=d.pe10yr>0?d.pe10yr:(d.pe5yrMed>0?d.pe5yrMed:d.pe3yrMed);
-  const fv=(fp>0&&ttm>0)?fp*ttm:0;
-  const df=(cmp>0&&fv>0)?(cmp-fv)/fv*100:null;
-  const ds=df!==null?(df>=0?'+':'')+df.toFixed(1)+'%':'—';
-  const dc=df===null?'#7a7060':df<-15?'#6dcc45':df<0?'#8dd060':df<15?'#f0be40':'#f06060';
-  const vd=df===null?'':df<-20?'DEEPLY UNDERVALUED':df<-10?'UNDERVALUED':df<-3?'SLIGHTLY UNDERVALUED':df<3?'FAIRLY VALUED':df<15?'SLIGHTLY OVERVALUED':'OVERVALUED';
-
-  const banner=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
-<div style="background:rgba(0,0,0,0.4);border:1px solid rgba(240,192,64,0.25);border-radius:8px;padding:12px 16px;text-align:center">
-  <div style="font-size:10px;color:#7a7060;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px">CURRENT MARKET PRICE</div>
-  <div style="font-size:26px;font-weight:700;color:#e8dfc0;font-family:'Courier Prime',monospace">${cmp>0?_inr(cmp):'Enter CMP \u2191'}</div>
-  <div style="font-size:11px;margin-top:4px;color:${dc};font-weight:700">${vd}</div>
-</div>
-<div style="background:rgba(0,0,0,0.4);border:1px solid rgba(240,192,64,0.25);border-radius:8px;padding:12px 16px;text-align:center">
-  <div style="font-size:10px;color:#7a7060;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px">DERIVED FAIR VALUE</div>
-  <div style="font-size:26px;font-weight:700;color:#f0c040;font-family:'Courier Prime',monospace">${fv>0?_inr(fv):'—'}</div>
-  <div style="font-size:11px;color:#7a7060;margin-top:4px">${fp>0?(d.pe10yr>0?'10yr':'5yr')+' Med PE '+fp.toFixed(1)+'x \xd7 TTM EPS '+_inr(ttm):''}</div>
-</div>
-<div style="background:rgba(0,0,0,0.4);border:1px solid rgba(240,192,64,0.25);border-radius:8px;padding:12px 16px;text-align:center">
-  <div style="font-size:10px;color:#7a7060;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px">DIFFERENCE</div>
-  <div style="font-size:26px;font-weight:700;color:${dc};font-family:'Courier Prime',monospace">${ds}</div>
-  <div style="font-size:11px;color:#7a7060;margin-top:4px">${fv>0&&cmp>0?(cmp<fv?_inr(fv-cmp)+' below FV':_inr(cmp-fv)+' above FV'):''}</div>
-</div></div>`;
-
-  /* ── 8 PE Cards: ATH | ATL | 3yr | 5yr | 10yr | Current | +1SD | -1SD ── */
-  const currCol=df===null?'#f0c040':dc;
-  const cards=[
-    ['ALL-TIME HIGH PE',  d.peATH,    '#f06060','rgba(240,60,60,0.12)'],
-    ['ALL-TIME LOW PE',   d.peATL,    '#6dcc45','rgba(60,180,60,0.12)'],
-    ['3-YR MEDIAN PE',   d.pe3yrMed, '#60a8f0','rgba(60,130,240,0.12)'],
-    ['5-YR MEDIAN PE',   d.pe5yrMed, '#f0c040','rgba(240,192,64,0.12)'],
-    ['10-YR MEDIAN PE',  med10,       '#9080f0','rgba(140,100,240,0.12)'],
-    ['CURRENT TTM PE',   currPE,      currCol, 'rgba(240,192,64,0.07)'],
-    ['+1 STD DEV PE',    d.peP1SD,   '#f0be40','rgba(240,190,64,0.08)'],
-    ['\u22121 STD DEV PE', d.peM1SD, '#a89f80','rgba(160,155,120,0.08)'],
-  ];
-  /* v39: Row1 = ATH|ATL|3yr|5yr|10yr (5-col), Row2 = Current|+1SD|-1SD (3-col) */
-  function _card(l,v,c,bg){return `<div style="background:${bg};border:1px solid ${c}55;border-radius:8px;padding:11px 12px;text-align:center">
-  <div style="font-size:9px;color:#7a7060;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">${l}</div>
-  <div style="font-size:20px;font-weight:700;color:${c};font-family:'Cinzel',serif">${_pe(v)}</div>
-  <div style="font-size:11px;color:#7a7060;margin-top:3px">${ttm>0?_pv(v,ttm):''}</div>
-</div>`;}
-  const row1Cards=cards.slice(0,5);   /* ATH | ATL | 3yr | 5yr | 10yr */
-  const row2Cards=cards.slice(5);     /* Current TTM | +1SD | -1SD    */
-  const cardHtml=
-    `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px">`+
-      row1Cards.map(([l,v,c,bg])=>_card(l,v,c,bg)).join('')+`</div>`+
-    `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">`+
-      row2Cards.map(([l,v,c,bg])=>_card(l,v,c,bg)).join('')+`</div>`;
-
-  /* ── 7yr bars: 1yr → 7yr left to right ── */
-  const hist=[
-    {l:'1yr',v:d.pe1yr},{l:'2yr',v:d.pe2yr},{l:'3yr',v:d.pe3yr},
-    {l:'4yr',v:d.pe4yr},{l:'5yr',v:d.pe5yr},{l:'6yr',v:d.pe6yr},{l:'7yr',v:d.pe7yr}
-  ].filter(x=>x.v>0&&x.v<500);
-  let histHtml='';
-  if(hist.length){
-    const mx=Math.max(...hist.map(x=>x.v));
-    const med=d.pe5yrMed||0;
-    histHtml=`<div>
-  <div style="font-size:10px;color:#7a7060;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">
-    PE History (1yr \u2192 7yr) &nbsp;
-    <span style="color:#6dcc45">\u25aa Below median</span>
-    <span style="color:#f0c040"> \u25aa Near median</span>
-    <span style="color:#f06060"> \u25aa Above median</span>
-  </div>
-  <div style="display:flex;gap:6px;align-items:flex-end;background:rgba(0,0,0,0.25);border:1px solid rgba(240,192,64,0.15);border-radius:8px;padding:10px 14px">
-  ${hist.map(x=>{
-    /* v39: PE value printed INSIDE the coloured bar — no separate label above */
-    const c=med>0?(x.v>med*1.1?'#f06060':x.v<med*0.9?'#6dcc45':'#f0c040'):'#f0c040';
-    const bg=med>0?(x.v>med*1.1?'rgba(140,18,18,0.75)':x.v<med*0.9?'rgba(40,100,20,0.75)':'rgba(130,88,12,0.75)'):'rgba(130,88,12,0.75)';
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
-      <div style="width:100%;background:${bg};border-radius:6px;padding:12px 4px;text-align:center">
-        <div style="font-size:13px;font-weight:700;color:${c};font-family:'Courier Prime',monospace">${x.v.toFixed(1)}</div>
-      </div>
-      <div style="font-size:11px;color:#7a7060">${x.l}</div>
-    </div>`;
-  }).join('')}
-  </div>
-</div>`;
-  }
-
-  return `<div id="_v38pe" style="margin:20px 0;background:var(--bg3,#141428);border:1px solid rgba(240,192,64,0.3);border-radius:10px;padding:18px">
-${banner}${cardHtml}${histHtml}</div>`;
-}
 
 /* ═══ B. SHAREHOLDING ═══════════════════════════════════════════ */
 function _renderSH(d){
@@ -3928,6 +3876,63 @@ setInterval(function(){
 })();
 
 console.log('[v39] ready \u2014 PFD:',Object.keys(PFD).length,'symbols');
+</script>
+<script>
+(function() {
+    const detailPanel = document.getElementById('detailPanel');
+    if (!detailPanel) return;
+
+    // Monitor when the side panel opens to inject the table
+    const observer = new MutationObserver(() => {
+        if (detailPanel.style.display !== 'none') {
+            renderShareholding();
+        }
+    });
+
+    observer.observe(detailPanel, { attributes: true, attributeFilter: ['style'] });
+
+    function renderShareholding() {
+        // Remove existing table to refresh data for new stock
+        const existing = document.getElementById('shareholdingSection');
+        if (existing) existing.remove();
+
+        const titleText = document.getElementById('detailTitle').innerText;
+        const symbol = titleText.split('—')[0].trim();
+        
+        // Find the specific stock data in your main array
+        const s = typeof stocks !== 'undefined' ? stocks.find(i => i.symbol === symbol) : null;
+
+        const shHtml = `
+            <div id="shareholdingSection" style="margin-top:25px; border-top: 1px solid rgba(240,192,64,0.2); padding-top: 15px;">
+                <div style="font-family:'Cinzel',serif; font-size:14px; color:#f0c040; margin-bottom:12px; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+                    <span>📊</span> SHAREHOLDING PATTERN
+                </div>
+                <table style="width:100%; border-collapse: collapse; font-family: 'Courier Prime', monospace; font-size: 13px; color: #e8dfc0;">
+                    <thead>
+                        <tr style="color: #7a7060; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid rgba(240,192,64,0.1);">
+                            <th style="text-align:left; padding: 8px 4px;">Category</th>
+                            <th style="text-align:right; padding: 8px 4px;">Current %</th>
+                            <th style="text-align:right; padding: 8px 4px;">Trend</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${['Promoters', 'FII', 'DII', 'Public'].map(cat => {
+                            const val = (s && s.shareholding && s.shareholding[cat]) ? s.shareholding[cat] : null;
+                            const display = val ? val.toFixed(2) + '%' : '—';
+                            return `
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 10px 4px; color: #a89f80; font-weight:600;">${cat.toUpperCase()}</td>
+                                    <td style="padding: 10px 4px; text-align: right; font-weight: 700; color: #fff;">${display}</td>
+                                    <td style="padding: 10px 4px; text-align: right; color: #7a7060; font-size:11px;">STABLE</td>
+                                </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+
+        detailPanel.appendChild(document.createRange().createContextualFragment(shHtml));
+    }
+})();
 </script>
 </body>
 </html>
